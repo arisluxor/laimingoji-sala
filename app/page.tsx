@@ -1,173 +1,150 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
-import { 
-  Search, MapPin, Calendar, Clock, Plane, ChevronRight, Check, Phone, 
-  Mail, MessageCircle, Camera, Edit, Save, Trash2, Plus, X, Star, ShieldCheck, Heart 
-} from "lucide-react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
+import { Search, MapPin, Calendar, Clock, Plane, ChevronRight, Check, Phone, Mail, MessageCircle, Camera, Edit, Save, Trash2, Plus, X, Star, ShieldCheck, Heart } from "lucide-react";
 
-export default function Home() {
-  // --- STATES ---
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+function MainContent() {
+  const searchParams = useSearchParams();
+  const isAdminSession = searchParams.get('admin') === 'sala2026'; // SLAPTAS RAKTAS
+  
   const [isAdmin, setIsAdmin] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedTrip, setSelectedTrip] = useState<any>(null); // Detaliam vaizdui
+  const [selectedTrip, setSelectedTrip] = useState<any>(null);
+  const [trips, setTrips] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [orderSuccess, setOrderSuccess] = useState(false);
-  
-  const [trips, setTrips] = useState([
-    { id: 1, title: "Svajonių Madeira 🌴", price: "527", tag: "Paskutinė minutė", img: "https://images.unsplash.com/photo-1510414842594-a61c69b5ae57?w=800", desc: "Aukščiausios klasės poilsis Portugalijos perle. Mėgaukitės levadomis ir vandenyno gaiva." },
-    { id: 2, title: "Japonijos vyšnios", price: "1899", tag: "Populiariausia", img: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800", desc: "Kultūrinė odisėja per Tokiją, Kiotą ir Osaką. Skrydis ir gidas įskaičiuoti." },
-    { id: 3, title: "Egiptas: Luksoras ir poilsis", price: "399", tag: "Gera kaina", img: "https://images.unsplash.com/photo-1503177119275-0aa32b3a9368?w=800", desc: "Istorija ir „viskas įskaičiuota“ malonumai prie Raudonosios jūros." }
-  ]);
 
-  const [newTrip, setNewTrip] = useState({ title: "", price: "", img: "", tag: "Naujiena", desc: "" });
+  async function fetchTrips() {
+    const { data } = await supabase.from('trips').select('*').order('created_at', { ascending: false });
+    if (data) setTrips(data);
+    setLoading(false);
+  }
 
-  // Load from local
-  useEffect(() => {
-    const saved = localStorage.getItem("laimingoji_trips_v2");
-    if (saved) setTrips(JSON.parse(saved));
-  }, []);
+  useEffect(() => { fetchTrips(); }, []);
 
-  const saveTrips = (data: any) => {
-    setTrips(data);
-    localStorage.setItem("laimingoji_trips_v2", JSON.stringify(data));
-  };
-
-  // --- FILTRAVIMAS (Brainstorm 2 punktas) ---
-  const filteredTrips = useMemo(() => {
-    return trips.filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()));
-  }, [trips, searchQuery]);
-
-  // --- HANDLERS ---
-  const addTrip = (e: any) => {
+  const addTrip = async (e: any) => {
     e.preventDefault();
-    const updated = [...trips, { ...newTrip, id: Date.now() }];
-    saveTrips(updated);
-    setNewTrip({ title: "", price: "", img: "", tag: "Naujiena", desc: "" });
+    const formData = new FormData(e.target);
+    const tripData = {
+      title: formData.get("title"),
+      price: formData.get("price"),
+      img: formData.get("img"),
+      tag: formData.get("tag"),
+      description: formData.get("desc")
+    };
+    await supabase.from('trips').insert([tripData]);
+    fetchTrips();
+    e.target.reset();
   };
 
-  const deleteTrip = (id: number) => {
-    if(confirm("Ištrinti?")) saveTrips(trips.filter(t => t.id !== id));
-  };
-
-  const handleOrder = (e: any) => {
+  const handleOrder = async (e: any) => {
     e.preventDefault();
-    setOrderSuccess(true);
-    setTimeout(() => {
-      setOrderSuccess(false);
-      setSelectedTrip(null);
-    }, 3000);
-    // Čia Lukas gautų tavo testinį email
-    console.log("Užsakymas gautas iš kliento!", e.target.email.value);
+    const form = e.target;
+    // FORM-SPREE INTEGRACIJA (Įrašyk savo ID iš Formspree)
+    const response = await fetch("https://formspree.io/f/TAVO_ID_CIA", {
+      method: "POST",
+      body: new FormData(form),
+      headers: { 'Accept': 'application/json' }
+    });
+    if (response.ok) {
+      setOrderSuccess(true);
+      setTimeout(() => { setSelectedTrip(null); setOrderSuccess(false); }, 3000);
+    }
   };
+
+  const filteredTrips = trips.filter(t => t.title.toLowerCase().includes(searchQuery.toLowerCase()));
 
   return (
-    <div className="min-h-screen bg-[#FDFDFD] font-sans text-slate-900 selection:bg-emerald-100">
+    <div className="min-h-screen bg-white text-slate-900">
       
-      {/* 🛠️ ADMIN TOGGLE */}
-      <button 
-        onClick={() => setIsAdmin(!isAdmin)}
-        className="fixed bottom-6 left-6 z-[100] p-4 bg-slate-900 text-white rounded-full shadow-2xl hover:scale-110 transition-all"
-      >
-        {isAdmin ? <Save size={20}/> : <Edit size={20}/>}
-      </button>
+      {/* 🛠️ ADMIN MYGTUKAS - Matomas TIK su slaptu linku */}
+      {isAdminSession && (
+        <button onClick={() => setIsAdmin(!isAdmin)} className="fixed bottom-6 left-6 z-[100] p-4 bg-red-600 text-white rounded-full shadow-2xl">
+          {isAdmin ? <Save /> : <Edit />}
+        </button>
+      )}
 
-      {/* NAVIGACIJA */}
-      <nav className="bg-white/80 backdrop-blur-xl sticky top-0 z-50 border-b border-slate-100 px-6 py-4 flex justify-between items-center">
-        <div className="max-w-7xl mx-auto w-full flex justify-between items-center">
-          <div className="text-2xl font-black flex items-center gap-2 tracking-tighter">
-            <span className="text-3xl">🏝️</span> Laimingoji<span className="text-emerald-500 font-serif italic">Sala</span>
+      {/* 1. TOP BAR - SU-CENTRUOTAS */}
+      <div className="bg-[#22c55e] text-white py-2 px-4 text-[13px] hidden md:flex justify-center items-center gap-10 font-medium">
+        <div className="flex gap-6">
+          <span className="hover:underline cursor-pointer">Lėktuvų bilietai</span>
+          <span className="hover:underline cursor-pointer">Viešbučiai</span>
+          <span className="hover:underline cursor-pointer">Kontaktai</span>
+        </div>
+        <div className="flex gap-6 items-center border-l border-white/30 pl-10">
+          <span className="font-bold flex items-center gap-1"><Phone size={14}/> +370 625 30999</span>
+          <span className="font-bold flex items-center gap-1"><Mail size={14}/> Lukas@laimingojisala.lt</span>
+        </div>
+      </div>
+
+      {/* 2. NAVIGACIJA */}
+      <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-slate-100 px-6 py-4 flex justify-between items-center shadow-sm">
+        <div className="max-w-7xl mx-auto w-full flex justify-between items-center font-bold">
+          <div className="text-2xl font-black flex items-center gap-1 italic tracking-tighter">
+            🏝️ Laimingoji<span className="text-[#22c55e]">Sala</span>
           </div>
-          <div className="hidden lg:flex gap-8 text-[13px] font-bold uppercase tracking-widest text-slate-500">
-            <a href="#" className="text-emerald-600">Pradinis</a>
-            <a href="#" className="hover:text-emerald-600 transition">Egzotika</a>
-            <a href="#" className="hover:text-emerald-600 transition">Lietuva</a>
-            <a href="mailto:Lukas@laimingojisala.lt" className="text-slate-900 border-l pl-8 border-slate-200 ml-4 flex items-center gap-2 font-black">
-               <Mail size={16} className="text-emerald-500"/> Lukas@laimingojisala.lt
-            </a>
+          <div className="hidden lg:flex gap-8 text-[12px] uppercase tracking-widest text-slate-400">
+            <a href="#" className="text-[#22c55e]">Egzotika</a>
+            <a href="#" className="hover:text-[#22c55e] transition">Lietuva</a>
+            <a href="#" className="hover:text-[#22c55e] transition">Paskutinė minutė</a>
           </div>
         </div>
       </nav>
 
-      {/* HERO & SEARCH */}
-      <section className="relative h-[70vh] flex flex-col items-center justify-center text-center px-6">
-        <div className="absolute inset-0 z-0 bg-emerald-50 opacity-40">
-           <img src="https://images.unsplash.com/photo-1473116763249-2faaef81ccda?w=1600" className="w-full h-full object-cover mix-blend-overlay" alt=""/>
+      {/* 3. HERO & SEARCH */}
+      <header className="relative py-20 text-center bg-emerald-50/20 px-6">
+        <h1 className="text-5xl md:text-7xl font-black mb-8 tracking-tighter">
+           Kur <span className="text-[#22c55e] italic">keliausime?</span>
+        </h1>
+        <div className="bg-white p-2 rounded-full shadow-2xl border border-slate-100 flex items-center max-w-2xl mx-auto">
+          <div className="pl-6 pr-4 text-[#22c55e]"><Search size={24}/></div>
+          <input 
+            type="text" 
+            placeholder="Ieškokite savo svajonės..." 
+            className="flex-1 py-4 outline-none text-lg"
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
+      </header>
 
-        <div className="relative z-10 max-w-4xl">
-          <h1 className="text-6xl md:text-8xl font-black mb-8 tracking-tighter text-slate-950">
-             Sveiki! <br/> Kur <span className="text-emerald-500 italic">keliausime?</span>
-          </h1>
-          
-          {/* FUNCTIONAL SEARCH BAR */}
-          <div className="bg-white p-2 rounded-full shadow-2xl border border-slate-100 flex items-center max-w-2xl mx-auto group focus-within:ring-4 ring-emerald-100 transition-all">
-            <div className="pl-6 pr-4 text-emerald-500"><Search size={24}/></div>
-            <input 
-              type="text" 
-              placeholder="Ieškokite krypties (pvz: Japonija)..." 
-              className="flex-1 py-4 bg-transparent outline-none text-lg font-medium"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <button className="bg-emerald-500 text-white px-8 py-4 rounded-full font-bold hover:bg-emerald-600 transition-all shadow-lg">
-              IEŠKOTI
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* ADMIN PANEL */}
+      {/* 4. ADMIN PANELĖ */}
       {isAdmin && (
-        <div className="max-w-4xl mx-auto bg-amber-50 p-8 rounded-[2.5rem] border-2 border-dashed border-amber-200 my-10 animate-pulse-slow">
-           <h2 className="text-2xl font-black mb-6 flex items-center gap-2">🛠️ PRIDĖTI NAUJĄ KELIONĘ</h2>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <input placeholder="Pavadinimas" className="p-4 rounded-2xl border-none shadow-sm" value={newTrip.title} onChange={e => setNewTrip({...newTrip, title: e.target.value})} />
-              <input placeholder="Kaina" className="p-4 rounded-2xl border-none shadow-sm" value={newTrip.price} onChange={e => setNewTrip({...newTrip, price: e.target.value})} />
-              <input placeholder="Foto URL" className="p-4 rounded-2xl border-none shadow-sm md:col-span-2" value={newTrip.img} onChange={e => setNewTrip({...newTrip, img: e.target.value})} />
-              <textarea placeholder="Aprašymas" className="p-4 rounded-2xl border-none shadow-sm md:col-span-2" value={newTrip.desc} onChange={e => setNewTrip({...newTrip, desc: e.target.value})} />
-              <button onClick={addTrip} className="md:col-span-2 bg-emerald-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-emerald-700 transition">
-                <Plus/> Įtraukti į sąrašą
-              </button>
-           </div>
+        <div className="max-w-4xl mx-auto bg-yellow-50 p-8 rounded-[2rem] border-2 border-dashed border-yellow-200 my-10 animate-in slide-in-from-top">
+           <h2 className="text-xl font-black mb-4">🛠️ DB VALDYMAS</h2>
+           <form onSubmit={addTrip} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input name="title" placeholder="Pavadinimas" className="p-4 rounded-xl border" required />
+              <input name="price" placeholder="Kaina" className="p-4 rounded-xl border" required />
+              <input name="img" placeholder="Foto URL" className="p-4 rounded-xl border md:col-span-2" required />
+              <textarea name="desc" placeholder="Aprašymas" className="p-4 rounded-xl border md:col-span-2" />
+              <button type="submit" className="md:col-span-2 bg-[#22c55e] text-white py-4 rounded-xl font-bold">PRIDĖTI KELIONĘ</button>
+           </form>
         </div>
       )}
 
-      {/* TRIPS GRID */}
+      {/* 5. KELIONĖS */}
       <section className="max-w-7xl mx-auto py-20 px-6">
-        <div className="flex justify-between items-end mb-12">
-          <div>
-            <h2 className="text-4xl font-black tracking-tight">Populiariausi pasiūlymai</h2>
-            <p className="text-slate-400 font-medium mt-2">Brolio Luko rankomis atrinktos svajonės</p>
-          </div>
-        </div>
-
+        <h2 className="text-3xl font-black mb-12 uppercase italic">Populiariausi pasiūlymai 🔥</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
           {filteredTrips.map((trip) => (
-            <div key={trip.id} className="group relative bg-white rounded-[2rem] overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500 hover:-translate-y-2">
-              <div className="relative h-72 overflow-hidden">
+            <div key={trip.id} className="bg-white rounded-[2rem] overflow-hidden shadow-lg border border-slate-50 group hover:-translate-y-2 transition-all">
+              <div className="h-64 overflow-hidden relative">
                 <img src={trip.img} className="w-full h-full object-cover group-hover:scale-110 transition duration-700" alt=""/>
-                <div className="absolute top-6 left-6 bg-white/90 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest text-emerald-900">
-                  {trip.tag}
-                </div>
                 {isAdmin && (
-                  <button onClick={() => deleteTrip(trip.id)} className="absolute top-6 right-6 bg-red-500 text-white p-2 rounded-full hover:scale-110 transition">
-                    <Trash2 size={18}/>
-                  </button>
+                  <button onClick={async () => { await supabase.from('trips').delete().eq('id', trip.id); fetchTrips(); }} className="absolute top-4 right-4 bg-red-500 text-white p-2 rounded-full"><Trash2 size={16}/></button>
                 )}
               </div>
               <div className="p-8">
-                <h3 className="text-2xl font-bold mb-4 leading-tight">{trip.title}</h3>
-                <div className="flex justify-between items-center pt-6 border-t border-slate-50">
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-300 uppercase">Kaina nuo</p>
-                    <span className="text-3xl font-black text-emerald-600">{trip.price} €</span>
-                  </div>
-                  <button 
-                    onClick={() => setSelectedTrip(trip)}
-                    className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-emerald-500 transition-colors"
-                  >
-                    Žiūrėti
-                  </button>
+                <h3 className="text-xl font-bold mb-4">{trip.title}</h3>
+                <div className="flex justify-between items-center border-t pt-6">
+                   <span className="text-2xl font-black text-[#22c55e]">{trip.price} €</span>
+                   <button onClick={() => setSelectedTrip(trip)} className="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-bold text-sm">Žiūrėti</button>
                 </div>
               </div>
             </div>
@@ -175,109 +152,50 @@ export default function Home() {
         </div>
       </section>
 
-      {/* SOCIAL PROOF (Brainstorm 5 punktas) */}
-      <section className="bg-emerald-950 py-24 text-white">
-        <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-16 items-center">
-          <div className="md:col-span-1">
-            <h2 className="text-4xl font-bold mb-6 italic">Kodėl <br/>Laimingoji Sala?</h2>
-            <div className="space-y-6">
-              <div className="flex items-center gap-4">
-                 <ShieldCheck className="text-emerald-400" size={32}/>
-                 <p className="font-bold">Saugumo Garantija</p>
-              </div>
-              <div className="flex items-center gap-4">
-                 <Heart className="text-emerald-400" size={32}/>
-                 <p className="font-bold">Asmeninis dėmesys</p>
-              </div>
-            </div>
-          </div>
-          <div className="md:col-span-2 bg-white/10 backdrop-blur-xl p-10 rounded-[3rem] border border-white/10">
-             <div className="flex gap-2 mb-6">
-               {[1,2,3,4,5].map(i => <Star key={i} className="text-yellow-400 fill-yellow-400" size={16}/>)}
-             </div>
-             <p className="text-2xl font-medium leading-relaxed mb-8">
-               "Lukas suorganizavo mums geriausias gyvenimo atostogas. Viskas nuo A iki Z buvo tobula. Jautėmės kaip tikroje Laimingoje saloje!"
-             </p>
-             <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-emerald-500 rounded-full"></div>
-                <div>
-                  <p className="font-bold">Gabija P.</p>
-                  <p className="text-sm opacity-50">Keliavo į Madeirą</p>
-                </div>
-             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* TRIP DETAIL MODAL (Brainstorm 3 & 4 punktas) */}
+      {/* 6. UŽSAKYMO MODALAS */}
       {selectedTrip && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md" onClick={() => setSelectedTrip(null)}></div>
-          <div className="relative bg-white w-full max-w-5xl rounded-[3rem] overflow-hidden flex flex-col md:flex-row shadow-2xl animate-in fade-in zoom-in duration-300">
-            <button onClick={() => setSelectedTrip(null)} className="absolute top-6 right-6 z-10 bg-white/80 p-2 rounded-full hover:bg-white">
-              <X size={24}/>
-            </button>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 backdrop-blur-md bg-slate-900/60">
+          <div className="bg-white w-full max-w-lg rounded-[2.5rem] p-10 relative animate-in zoom-in duration-200">
+            <button onClick={() => setSelectedTrip(null)} className="absolute top-6 right-6 text-slate-300 hover:text-slate-900"><X/></button>
+            <h2 className="text-3xl font-black mb-2">{selectedTrip.title}</h2>
+            <p className="text-slate-500 mb-8">Užpildykite formą ir Lukas susisieks su jumis per 15 minučių.</p>
             
-            <div className="md:w-1/2 h-80 md:h-auto">
-              <img src={selectedTrip.img} className="w-full h-full object-cover" alt=""/>
-            </div>
-            
-            <div className="md:w-1/2 p-10 flex flex-col">
-              <h2 className="text-4xl font-black mb-4">{selectedTrip.title}</h2>
-              <p className="text-slate-500 leading-relaxed mb-8">
-                {selectedTrip.desc || "Ši kelionė yra specialiai paruošta brolio Luko, siekiant suteikti jums maksimalų komfortą ir nepamirštamus įspūdžius. Į kainą įskaičiuoti visi mokesčiai ir asmeninė konsultacija."}
-              </p>
-              
-              {/* ORDER FORM (UŽSAKYMAS) */}
-              <div className="mt-auto bg-slate-50 p-6 rounded-3xl border border-slate-100">
-                {orderSuccess ? (
-                  <div className="text-center py-4">
-                    <Check className="mx-auto text-emerald-500 mb-2" size={40}/>
-                    <p className="font-bold text-emerald-600">Užklausa išsiųsta Lukui!</p>
-                    <p className="text-xs text-slate-400">Patikrinkite savo Temp Mail už 1 min.</p>
-                  </div>
-                ) : (
-                  <form onSubmit={handleOrder} className="space-y-4">
-                    <p className="text-sm font-bold uppercase text-slate-400">Rezervuoti vietą</p>
-                    <input name="email" required type="email" placeholder="Jūsų el. paštas (pvz. iš Temp Mail)" className="w-full p-4 rounded-xl border-none outline-none ring-2 ring-transparent focus:ring-emerald-500 transition-all" />
-                    <button className="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-emerald-700 transition shadow-xl shadow-emerald-100 flex items-center justify-center gap-2">
-                       Užsakyti už {selectedTrip.price} € <ChevronRight size={20}/>
-                    </button>
-                  </form>
-                )}
-              </div>
-            </div>
+            {orderSuccess ? (
+              <div className="text-center text-green-500 font-bold py-10">Užsakymas sėkmingai išsiųstas Lukui! ✅</div>
+            ) : (
+              <form onSubmit={handleOrder} className="space-y-4">
+                <input type="hidden" name="Kelionė" value={selectedTrip.title} />
+                <input type="hidden" name="Kaina" value={selectedTrip.price} />
+                <input name="email" required type="email" placeholder="Jūsų el. pašto adresas" className="w-full p-4 bg-slate-50 rounded-2xl outline-none focus:ring-2 ring-emerald-500" />
+                <input name="tel" placeholder="Telefono numeris (nebūtina)" className="w-full p-4 bg-slate-50 rounded-2xl outline-none" />
+                <button type="submit" className="w-full bg-[#22c55e] text-white py-4 rounded-2xl font-black text-lg shadow-xl shadow-emerald-100">SIŲSTI UŽKLAUSĄ</button>
+              </form>
+            )}
           </div>
         </div>
       )}
 
-      {/* FOOTER */}
-      <footer className="py-12 text-center border-t border-slate-100">
-         <p className="text-xs font-bold text-slate-300 uppercase tracking-widest">
-            © 2026 Laimingoji Sala • Powered by Lukas's Vision
-         </p>
+      {/* 7. FOOTERIS - NEMATOMAS INPUT PATAISYTAS */}
+      <footer className="bg-[#13221e] text-white py-20">
+         <div className="max-w-7xl mx-auto px-6 text-center">
+            <h3 className="text-2xl font-black mb-8 uppercase">Prenumeruokite Laimę 🏝️</h3>
+            <div className="flex max-w-md mx-auto mb-12">
+               <input type="email" placeholder="Įveskite savo el. paštą" className="flex-1 p-4 rounded-l-2xl text-slate-900 outline-none" />
+               <button className="bg-[#22c55e] px-8 rounded-r-2xl font-bold">OK</button>
+            </div>
+            <p className="text-slate-500 text-xs tracking-widest italic">© 2026 Laimingoji Sala • Lukas@laimingojisala.lt</p>
+         </div>
       </footer>
-
-      {/* FLOAT WHATSAPP */}
-      <a href="https://wa.me/37062530999" target="_blank" className="fixed bottom-6 right-6 bg-[#25D366] text-white p-5 rounded-full shadow-2xl hover:scale-110 transition-all z-50">
-        <MessageCircle size={24}/>
-      </a>
 
     </div>
   );
 }
 
-// Sub-component search field
-function SearchField({ label, value, icon }: any) {
+// Next.js reikalavimas dėl paieškos parametrų
+export default function Home() {
   return (
-    <div className="flex-1 px-6 py-4 rounded-2xl hover:bg-slate-50 transition-colors cursor-pointer text-left">
-      <div className="flex items-center gap-3">
-        <div className="text-emerald-500">{icon}</div>
-        <div>
-          <p className="text-[10px] font-black uppercase text-slate-300 tracking-wider leading-none mb-1">{label}</p>
-          <p className="text-sm font-bold text-slate-700 leading-none">{value}</p>
-        </div>
-      </div>
-    </div>
+    <Suspense fallback={<div>Kraunama...</div>}>
+      <MainContent />
+    </Suspense>
   );
 }
